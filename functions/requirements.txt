@@ -1,1 +1,11 @@
-firebase_functions~=0.1.0
+# Python 3.11+
+firebase-functions>=0.4.0
+firebase-admin>=6.0.0
+# Langgraph and LLM
+langgraph>=0.2.0
+# LLM client (e.g. openai or litellm for streaming)
+openai>=1.0.0
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pyyaml>=6.0

@@ -1,0 +1,296 @@
+openapi: 3.0.3
+info:
+  title: Inspection API
+  description: AI-first guided inspection – create session from intent, question loop, evidence, collaboration, record.
+  version: 0.1.0
+
+servers:
+  - url: /api/v1
+    description: Base path (host from Firebase Hosting / Cloud Functions)
+
+tags:
+  - name: sessions
+    description: Inspection session lifecycle
+  - name: prompts
+    description: Question-by-question flow
+  - name: evidence
+    description: Evidence capture
+  - name: collaboration
+    description: Sharing and collaborator contributions
+  - name: record
+    description: Decision-ready inspection record
+
+paths:
+  /tenants/{tenantId}/inspection_sessions:
+    post:
+      tags: [sessions]
+      summary: Create inspection session from intent
+      description: FR-001. Accept goal and constraints in natural language; create session and return initial steps or first prompt.
+      operationId: createSession
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intent]
+              properties:
+                intent:
+                  type: object
+                  required: [goal]
+                  properties:
+                    goal: { type: string }
+                    constraints: { type: object }
+                target:
+                  type: object
+                  properties:
+                    type: { type: string }
+                    identifier: { type: string }
+                    displayName: { type: string }
+      responses:
+        '201':
+          description: Session created; initial steps or first prompt returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionCreated'
+        '400':
+          description: Invalid or ambiguous intent; may include clarification prompt.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}:
+    get:
+      tags: [sessions]
+      summary: Get session (for resumption)
+      description: FR-014. Return session state and progress for resumption.
+      operationId: getSession
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Session state and current step/prompt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionState'
+        '404':
+          description: Session not found or not accessible.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}/next:
+    post:
+      tags: [prompts]
+      summary: Submit answer and get next prompt
+      description: FR-002, FR-003, FR-005. Submit answer for current step; receive next prompt (or adaptation).
+      operationId: submitAnswerAndGetNext
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answer: { type: string }
+                observation: { type: string }
+                priority: { type: string, enum: [critical, normal, low] }
+      responses:
+        '200':
+          description: Next prompt (or completion).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextPrompt'
+        '400':
+          description: Invalid or missing answer.
+        '404':
+          description: Session not found.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}/evidence:
+    post:
+      tags: [evidence]
+      summary: Add evidence
+      description: FR-004. Capture evidence and associate with step/observation.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [observationId, type]
+              properties:
+                observationId: { type: string }
+                type: { type: string, enum: [note, photo, measurement, file] }
+                payload: { type: object }
+                storagePath: { type: string }
+      responses:
+        '201':
+          description: Evidence recorded; attributable to caller.
+        '400':
+          description: Invalid type or missing observationId.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}/share:
+    post:
+      tags: [collaboration]
+      summary: Share inspection with participants
+      description: FR-010. Grant access so participants can add comments, follow-ups, evidence.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                participantIds: { type: array, items: { type: string } }
+                linkEnabled: { type: boolean }
+      responses:
+        '200':
+          description: Sharing updated.
+        '404':
+          description: Session not found.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}/collaboration:
+    post:
+      tags: [collaboration]
+      summary: Add collaborator contribution
+      description: FR-010, FR-011. Add comment, follow-up task, or evidence; incorporated into plan.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, content]
+              properties:
+                type: { type: string, enum: [comment, follow_up_task, evidence] }
+                content: { type: object }
+                linkedStepId: { type: string }
+      responses:
+        '201':
+          description: Contribution recorded; attributable to caller.
+        '400':
+          description: Invalid type or content.
+
+  /tenants/{tenantId}/inspection_sessions/{sessionId}/record:
+    get:
+      tags: [record]
+      summary: Get inspection record
+      description: FR-013. Decision-ready summary (findings, evidence, incomplete, follow-ups). Available when session completed.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inspection record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionRecord'
+        '404':
+          description: Session not found or not completed.
+
+components:
+  schemas:
+    SessionCreated:
+      type: object
+      properties:
+        sessionId: { type: string }
+        status: { type: string, enum: [created, in_progress] }
+        initialSteps: { type: array, items: { $ref: '#/components/schemas/StepSummary' } }
+        currentPrompt: { $ref: '#/components/schemas/Prompt' }
+
+    SessionState:
+      type: object
+      properties:
+        sessionId: { type: string }
+        status: { type: string }
+        currentPrompt: { $ref: '#/components/schemas/Prompt' }
+        progress: { type: object }
+
+    NextPrompt:
+      type: object
+      properties:
+        hasNext: { type: boolean }
+        prompt: { $ref: '#/components/schemas/Prompt' }
+        stepCompleted: { $ref: '#/components/schemas/StepSummary' }
+        sessionStatus: { type: string }
+
+    Prompt:
+      type: object
+      properties:
+        stepId: { type: string }
+        text: { type: string }
+        type: { type: string }
+
+    StepSummary:
+      type: object
+      properties:
+        stepId: { type: string }
+        order: { type: integer }
+        type: { type: string }
+        status: { type: string }
+
+    InspectionRecord:
+      type: object
+      properties:
+        sessionId: { type: string }
+        summary:
+          type: object
+          properties:
+            findings: { type: array }
+            evidenceSummary: { type: array }
+            incomplete: { type: array }
+            followUps: { type: array }
+        generatedAt: { type: string, format: date-time }
+        version: { type: integer }
+
+security:
+  - bearerAuth: []
