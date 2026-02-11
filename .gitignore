@@ -67,3 +67,21 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.env
+.env.*
+!.env.example
